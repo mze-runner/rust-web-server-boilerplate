@@ -1,0 +1,13 @@
+[package]
+name = "servicez-telemetry-console"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Telemetry dependencies live here, NOT in root crate
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter", "json"] }
+anyhow = "1"
+
+[dev-dependencies]
+tokio = { version = "1.49", features = ["macros", "rt-multi-thread"] }

@@ -1,0 +1,66 @@
+[package]
+name = "servicez"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["postgres", "telemetry-console"]        # Sensible default for development
+postgres = ["servicez-db-postgres"]           # Feature enables dependency
+scylla = ["servicez-db-scylla"]         # Feature enables dependency
+all-databases = ["postgres", "scylla"]  # For development/testing
+
+# Telemetry features (NEW)
+telemetry-console = ["servicez-telemetry-console"]
+
+[workspace]
+resolver = "2"
+members = [
+    "domain", 
+    "application",
+    "http",
+    "adapters/postgres",
+    "adapters/scylla",
+    "adapters/telemetry",
+]
+
+[dependencies]
+servicez-domain = { path = "./domain" }
+servicez-application = { path = "./application" }
+
+# Persistence adapters are compiled in but can be used later behind features.
+servicez-db-postgres = { path = "./adapters/postgres", optional = true }
+servicez-db-scylla = { path = "./adapters/scylla", optional = true }
+servicez-http = { path = "./http" }
+
+# Core Runtime & Web
+tokio = { version = "1.51.1", features = ["full"] }
+axum = "0.8.9"
+tower = "0.5.3"
+tower-http = { version = "0.6.8", features = ["full"] }
+
+# Error Handling
+anyhow = "1.0.102"
+thiserror = "2.0.18"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.149"
+config = "0.15.22"
+
+# Observability
+servicez-telemetry-console = { path = "./adapters/telemetry", optional = true }
+tracing = "0.1.44"
+
+# Utilities
+uuid = { version = "1.23", features = ["v4", "serde"] }
+
+# Validation
+garde = { version = "0.22.1", features = ["full"] }
+chrono = { version = "0.4.44", features = ["serde"] }
+
+# Prefix Vocabulary:
+# db-* → Databases (primary persistence)
+# cache-* → Caching layers
+# msg-* → Message brokers
+# search-* → Search engines (elasticsearch, meilisearch)
+# telemetry-* → Observability backends

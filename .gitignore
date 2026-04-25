@@ -1,0 +1,18 @@
+/target
+.github/
+.vscode/
+.DS_Store
+.idea/
+*.log
+
+Settings.toml
+Settings.*.toml
+
+README/
+
+# Claude Code
+CLAUDE.md
+.claude/
+.claudeignore
+
+/src/bin

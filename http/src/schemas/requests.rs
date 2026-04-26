@@ -55,6 +55,13 @@ pub struct AddCommentRequest {
 
 #[derive(Debug, Deserialize, garde::Validate)]
 #[serde(deny_unknown_fields)]
+pub struct EditCommentRequest {
+    #[garde(dive)]
+    pub body: CommentBodyField,
+}
+
+#[derive(Debug, Deserialize, garde::Validate)]
+#[serde(deny_unknown_fields)]
 pub struct CreateTaskRequest {
     #[garde(dive)]
     pub subject: TaskSubjectField,

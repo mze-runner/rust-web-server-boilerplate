@@ -19,7 +19,10 @@ use crate::{
     extractors::{auth::AuthenticatedUser, validation::ValidatedJson},
     middleware::trace::TraceId,
     schemas::{
-        requests::{AddCommentRequest, AssignTaskRequest, CreateTaskRequest, EditTaskRequest},
+        requests::{
+            AddCommentRequest, AssignTaskRequest, CreateTaskRequest, EditCommentRequest,
+            EditTaskRequest,
+        },
         response::{CommentListResponse, CommentResponse, TaskPageResponse, TaskResponse},
     },
 };
@@ -72,6 +75,14 @@ pub trait TaskOperations: Clone + Send + Sync + 'static {
         limit: u32,
         cursor: Option<(DateTime<Utc>, Uuid)>,
     ) -> impl Future<Output = Result<CommentListResponse, AppError>> + Send;
+
+    fn edit_comment(
+        &self,
+        caller_id: Uuid,
+        task_id: Uuid,
+        comment_id: Uuid,
+        body: String,
+    ) -> impl Future<Output = Result<CommentResponse, AppError>> + Send;
 }
 
 pub fn router<S>() -> Router<Arc<S>>
@@ -85,6 +96,10 @@ where
         .route(
             "/{id}/comments",
             get(list_comments_handler::<S>).post(add_comment_handler::<S>),
+        )
+        .route(
+            "/{id}/comments/{comment_id}",
+            put(edit_comment_handler::<S>),
         )
 }
 
@@ -252,6 +267,25 @@ async fn list_comments_handler<S: TaskOperations>(
     let caller_id = subject.0;
     match state
         .list_comments(caller_id, task_id, params.limit, cursor)
+        .await
+    {
+        Ok(response) => (StatusCode::OK, Json(response)).into_response(),
+        Err(e) => app_error_to_response(e, trace.as_str()),
+    }
+}
+
+async fn edit_comment_handler<S: TaskOperations>(
+    State(state): State<Arc<S>>,
+    Extension(trace): Extension<TraceId>,
+    AuthenticatedUser(subject): AuthenticatedUser,
+    Path((task_id, comment_id)): Path<(Uuid, Uuid)>,
+    ValidatedJson(body): ValidatedJson<EditCommentRequest>,
+) -> Response {
+    let caller_id = subject.0;
+    let comment_body = body.body.into_string();
+
+    match state
+        .edit_comment(caller_id, task_id, comment_id, comment_body)
         .await
     {
         Ok(response) => (StatusCode::OK, Json(response)).into_response(),

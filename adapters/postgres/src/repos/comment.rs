@@ -95,6 +95,52 @@ impl TaskCommentRepository for PostgresTaskCommentRepository {
         }
     }
 
+    fn find_by_id(
+        &self,
+        id: &TaskCommentId,
+    ) -> impl std::future::Future<Output = Result<Option<TaskComment>, DomainError>> + Send {
+        let pool = self.pool.clone();
+        let id_uuid = *id.as_uuid();
+
+        async move {
+            sqlx::query_as::<_, TaskCommentRow>(
+                "SELECT id, task_id, author_id, body, created_at, modified_by, modified_at \
+                 FROM task_comments WHERE id = $1",
+            )
+            .bind(id_uuid)
+            .fetch_optional(&pool)
+            .await
+            .map_err(|e| db_err("find_by_id", e))
+            .map(|opt| opt.map(TaskComment::from))
+        }
+    }
+
+    fn update(
+        &self,
+        comment: &TaskComment,
+    ) -> impl std::future::Future<Output = Result<(), DomainError>> + Send {
+        let pool = self.pool.clone();
+        let id = *comment.id().as_uuid();
+        let body = comment.body().to_owned();
+        let modified_by = *comment.modified_by().as_uuid();
+        let modified_at = comment.modified_at();
+
+        async move {
+            sqlx::query(
+                "UPDATE task_comments SET body = $2, modified_by = $3, modified_at = $4 \
+                 WHERE id = $1",
+            )
+            .bind(id)
+            .bind(body)
+            .bind(modified_by)
+            .bind(modified_at)
+            .execute(&pool)
+            .await
+            .map(|_| ())
+            .map_err(|e| db_err("update", e))
+        }
+    }
+
     fn list_for_task(
         &self,
         query: &ListCommentsQuery,
@@ -176,6 +222,68 @@ impl TaskCommentRepository for TxTaskCommentRepository {
             .await
             .map(|_| ())
             .map_err(|e| db_err("create", e))
+        }
+    }
+
+    fn find_by_id(
+        &self,
+        id: &TaskCommentId,
+    ) -> impl std::future::Future<Output = Result<Option<TaskComment>, DomainError>> + Send {
+        let tx = Arc::clone(&self.tx);
+        let id_uuid = *id.as_uuid();
+
+        async move {
+            let mut guard = tx.lock().await;
+            let conn = guard
+                .as_deref_mut()
+                .ok_or_else(|| DomainError::Repository {
+                    operation: "find_by_id".to_owned(),
+                    message: "transaction already committed or rolled back".to_owned(),
+                })?;
+
+            sqlx::query_as::<_, TaskCommentRow>(
+                "SELECT id, task_id, author_id, body, created_at, modified_by, modified_at \
+                 FROM task_comments WHERE id = $1",
+            )
+            .bind(id_uuid)
+            .fetch_optional(conn)
+            .await
+            .map_err(|e| db_err("find_by_id", e))
+            .map(|opt| opt.map(TaskComment::from))
+        }
+    }
+
+    fn update(
+        &self,
+        comment: &TaskComment,
+    ) -> impl std::future::Future<Output = Result<(), DomainError>> + Send {
+        let tx = Arc::clone(&self.tx);
+        let id = *comment.id().as_uuid();
+        let body = comment.body().to_owned();
+        let modified_by = *comment.modified_by().as_uuid();
+        let modified_at = comment.modified_at();
+
+        async move {
+            let mut guard = tx.lock().await;
+            let conn = guard
+                .as_deref_mut()
+                .ok_or_else(|| DomainError::Repository {
+                    operation: "update".to_owned(),
+                    message: "transaction already committed or rolled back".to_owned(),
+                })?;
+
+            sqlx::query(
+                "UPDATE task_comments SET body = $2, modified_by = $3, modified_at = $4 \
+                 WHERE id = $1",
+            )
+            .bind(id)
+            .bind(body)
+            .bind(modified_by)
+            .bind(modified_at)
+            .execute(conn)
+            .await
+            .map(|_| ())
+            .map_err(|e| db_err("update", e))
         }
     }
 

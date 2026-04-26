@@ -1,6 +1,8 @@
 use uuid::Uuid;
 
-use crate::schemas::fields::{EmailField, PasswordField, TaskDescriptionField, TaskSubjectField};
+use crate::schemas::fields::{
+    CommentBodyField, EmailField, PasswordField, TaskDescriptionField, TaskSubjectField,
+};
 use serde::Deserialize;
 
 /// Request body for POST /providers/self/signup
@@ -42,6 +44,13 @@ impl EditTaskRequest {
 pub struct AssignTaskRequest {
     #[garde(skip)]
     pub assignee_id: Uuid,
+}
+
+#[derive(Debug, Deserialize, garde::Validate)]
+#[serde(deny_unknown_fields)]
+pub struct AddCommentRequest {
+    #[garde(dive)]
+    pub body: CommentBodyField,
 }
 
 #[derive(Debug, Deserialize, garde::Validate)]

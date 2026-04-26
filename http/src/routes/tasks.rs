@@ -19,8 +19,8 @@ use crate::{
     extractors::{auth::AuthenticatedUser, validation::ValidatedJson},
     middleware::trace::TraceId,
     schemas::{
-        requests::{AssignTaskRequest, CreateTaskRequest, EditTaskRequest},
-        response::{TaskPageResponse, TaskResponse},
+        requests::{AddCommentRequest, AssignTaskRequest, CreateTaskRequest, EditTaskRequest},
+        response::{CommentResponse, TaskPageResponse, TaskResponse},
     },
 };
 
@@ -57,6 +57,13 @@ pub trait TaskOperations: Clone + Send + Sync + 'static {
         limit: u32,
         cursor: Option<(DateTime<Utc>, Uuid)>,
     ) -> impl Future<Output = Result<TaskPageResponse, AppError>> + Send;
+
+    fn add_comment(
+        &self,
+        caller_id: Uuid,
+        task_id: Uuid,
+        body: String,
+    ) -> impl Future<Output = Result<CommentResponse, AppError>> + Send;
 }
 
 pub fn router<S>() -> Router<Arc<S>>
@@ -67,6 +74,7 @@ where
         .route("/", get(list_tasks_handler::<S>).post(create_task::<S>))
         .route("/{id}", patch(edit_task::<S>))
         .route("/{id}/assignee", put(assign_task_handler::<S>))
+        .route("/{id}/comments", axum::routing::post(add_comment_handler::<S>))
 }
 
 #[derive(Deserialize)]
@@ -173,6 +181,22 @@ async fn edit_task<S: TaskOperations>(
         .await
     {
         Ok(response) => (StatusCode::OK, Json(response)).into_response(),
+        Err(e) => app_error_to_response(e, trace.as_str()),
+    }
+}
+
+async fn add_comment_handler<S: TaskOperations>(
+    State(state): State<Arc<S>>,
+    Extension(trace): Extension<TraceId>,
+    AuthenticatedUser(subject): AuthenticatedUser,
+    Path(task_id): Path<Uuid>,
+    ValidatedJson(body): ValidatedJson<AddCommentRequest>,
+) -> Response {
+    let caller_id = subject.0;
+    let comment_body = body.body.into_string();
+
+    match state.add_comment(caller_id, task_id, comment_body).await {
+        Ok(response) => (StatusCode::CREATED, Json(response)).into_response(),
         Err(e) => app_error_to_response(e, trace.as_str()),
     }
 }

@@ -7,8 +7,9 @@ use std::str::FromStr;
 
 use servicez_domain::{
     error::DomainError,
-    ports::{TaskRepository, UnitOfWork, UnitOfWorkFactory, UserRepository},
+    ports::{TaskCommentRepository, TaskRepository, UnitOfWork, UnitOfWorkFactory, UserRepository},
     task::{EditTaskCommand, ListTasksQuery, Task, TaskCursor, TaskId, TaskPage, TaskStatus},
+    task_comment::TaskComment,
     user::UserId,
 };
 
@@ -29,6 +30,7 @@ where
     F: UnitOfWorkFactory,
     <F::Uow as UnitOfWork>::Users: UserRepository,
     <F::Uow as UnitOfWork>::Tasks: TaskRepository,
+    <F::Uow as UnitOfWork>::Comments: TaskCommentRepository,
 {
     pub fn new(repo: Arc<R>, uow_factory: Arc<F>) -> Self {
         Self { repo, uow_factory }
@@ -147,6 +149,46 @@ where
         });
         let query = ListTasksQuery { caller_id, statuses, limit, cursor };
         self.repo.list_for_user(&query).await.map_err(AppError::Domain)
+    }
+
+    pub async fn add_comment(
+        &self,
+        caller_id: Uuid,
+        task_id: Uuid,
+        body: String,
+    ) -> Result<TaskComment, AppError> {
+        let caller_id = UserId::from_uuid(caller_id);
+        let task_id = TaskId::from_uuid(task_id);
+
+        let mut uow = self.uow_factory.begin().await.map_err(AppError::Domain)?;
+
+        let task = uow
+            .tasks()
+            .find_by_id(&task_id)
+            .await
+            .map_err(AppError::Domain)?
+            .ok_or_else(|| {
+                AppError::Domain(DomainError::NotFound {
+                    resource_type: "Task".into(),
+                    identifier: task_id.as_uuid().to_string(),
+                })
+            })?;
+
+        let is_visible = task.created_by() == &caller_id || task.assignee_id() == &caller_id;
+        if !is_visible {
+            return Err(AppError::Domain(DomainError::NotFound {
+                resource_type: "Task".into(),
+                identifier: task_id.as_uuid().to_string(),
+            }));
+        }
+
+        let now = chrono::Utc::now();
+        let comment = TaskComment::create(task_id, caller_id, body, now).map_err(AppError::Domain)?;
+
+        uow.comments().create(&comment).await.map_err(AppError::Domain)?;
+        uow.commit().await.map_err(AppError::Domain)?;
+
+        Ok(comment)
     }
 
     pub async fn edit_task(

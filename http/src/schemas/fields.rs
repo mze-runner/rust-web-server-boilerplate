@@ -64,6 +64,42 @@ impl<'de> Deserialize<'de> for EmailField {
     }
 }
 
+// Comment Fields
+
+#[derive(Debug, garde::Validate)]
+#[garde(transparent)]
+pub struct CommentBodyField(
+    #[garde(required, custom(validate_comment_body))] pub Option<String>,
+);
+
+impl CommentBodyField {
+    pub fn into_string(self) -> String {
+        self.0.expect("CommentBodyField must be validated before access")
+    }
+}
+
+fn validate_comment_body(value: &Option<String>, _ctx: &()) -> garde::Result {
+    let Some(s) = value else { return Ok(()) };
+    let trimmed = s.trim();
+    if trimmed.is_empty() {
+        return Err(garde::Error::new("body must not be blank"));
+    }
+    if trimmed.chars().count() > 1000 {
+        return Err(garde::Error::new("body must be at most 1000 characters"));
+    }
+    Ok(())
+}
+
+impl<'de> serde::Deserialize<'de> for CommentBodyField {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let opt = Option::<String>::deserialize(deserializer)?;
+        Ok(CommentBodyField(opt))
+    }
+}
+
 // Tasks Fields
 
 // Task Title field

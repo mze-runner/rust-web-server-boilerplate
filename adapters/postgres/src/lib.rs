@@ -5,6 +5,7 @@ pub mod repos;
 pub mod uow;
 
 pub use pool::build_pool;
+pub use repos::comment::PostgresTaskCommentRepository;
 pub use repos::task::PostgresTaskRepository;
 pub use uow::{PostgresUnitOfWork, PostgresUowFactory};
 

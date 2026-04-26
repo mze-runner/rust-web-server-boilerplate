@@ -9,6 +9,7 @@ use servicez_domain::{
 };
 
 use crate::error::map_sqlx_error;
+use crate::repos::comment::TxTaskCommentRepository;
 use crate::repos::task::TxTaskRepository;
 use crate::repos::user::TxUserRepository;
 
@@ -42,8 +43,9 @@ impl UnitOfWorkFactory for PostgresUowFactory {
         let tx = Arc::new(Mutex::new(Some(tx)));
         let users = TxUserRepository::new(Arc::clone(&tx));
         let tasks = TxTaskRepository::new(Arc::clone(&tx));
+        let comments = TxTaskCommentRepository::new(Arc::clone(&tx));
 
-        Ok(PostgresUnitOfWork { tx, users, tasks })
+        Ok(PostgresUnitOfWork { tx, users, tasks, comments })
     }
 }
 
@@ -55,11 +57,13 @@ pub struct PostgresUnitOfWork {
     tx: Arc<Mutex<Option<Transaction<'static, Postgres>>>>,
     users: TxUserRepository,
     tasks: TxTaskRepository,
+    comments: TxTaskCommentRepository,
 }
 
 impl UnitOfWork for PostgresUnitOfWork {
     type Users = TxUserRepository;
     type Tasks = TxTaskRepository;
+    type Comments = TxTaskCommentRepository;
 
     fn users(&mut self) -> &mut Self::Users {
         &mut self.users
@@ -67,6 +71,10 @@ impl UnitOfWork for PostgresUnitOfWork {
 
     fn tasks(&mut self) -> &mut Self::Tasks {
         &mut self.tasks
+    }
+
+    fn comments(&mut self) -> &mut Self::Comments {
+        &mut self.comments
     }
 
     async fn commit(self) -> Result<(), DomainError> {

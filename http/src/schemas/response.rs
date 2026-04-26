@@ -3,6 +3,7 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use servicez_domain::task::Task;
+use servicez_domain::task_comment::TaskComment;
 
 #[derive(Debug, Serialize)]
 pub struct TaskResponse {
@@ -15,6 +16,31 @@ pub struct TaskResponse {
     pub created_at: DateTime<Utc>,
     pub modified_by: Uuid,
     pub modified_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CommentResponse {
+    pub id: Uuid,
+    pub task_id: Uuid,
+    pub author_id: Uuid,
+    pub body: String,
+    pub created_at: DateTime<Utc>,
+    pub modified_by: Uuid,
+    pub modified_at: DateTime<Utc>,
+}
+
+impl From<TaskComment> for CommentResponse {
+    fn from(c: TaskComment) -> Self {
+        Self {
+            id: *c.id().as_uuid(),
+            task_id: *c.task_id().as_uuid(),
+            author_id: *c.author_id().as_uuid(),
+            body: c.body().to_owned(),
+            created_at: c.created_at(),
+            modified_by: *c.modified_by().as_uuid(),
+            modified_at: c.modified_at(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]

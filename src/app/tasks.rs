@@ -6,7 +6,7 @@ use uuid::Uuid;
 use servicez_application::error::AppError;
 use servicez_http::{
     routes::tasks::TaskOperations,
-    schemas::response::{TaskPageResponse, TaskResponse},
+    schemas::response::{CommentResponse, TaskPageResponse, TaskResponse},
 };
 
 use super::state::AppState;
@@ -75,5 +75,15 @@ impl TaskOperations for AppState {
                 next_cursor,
             })
         }
+    }
+
+    fn add_comment(
+        &self,
+        caller_id: Uuid,
+        task_id: Uuid,
+        body: String,
+    ) -> impl std::future::Future<Output = Result<CommentResponse, AppError>> + Send {
+        let svc = Arc::clone(&self.task_service);
+        async move { svc.add_comment(caller_id, task_id, body).await.map(CommentResponse::from) }
     }
 }

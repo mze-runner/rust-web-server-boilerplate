@@ -111,9 +111,7 @@ where
             .await
             .map_err(AppError::Domain)?
             .ok_or_else(|| {
-                AppError::UnprocessableEntity(
-                    "assignee_id does not reference a known user".into(),
-                )
+                AppError::UnprocessableEntity("assignee_id does not reference a known user".into())
             })?;
 
         task.assign(new_assignee_id, &caller_id, chrono::Utc::now())
@@ -147,8 +145,16 @@ where
             created_at,
             id: TaskId::from_uuid(id),
         });
-        let query = ListTasksQuery { caller_id, statuses, limit, cursor };
-        self.repo.list_for_user(&query).await.map_err(AppError::Domain)
+        let query = ListTasksQuery {
+            caller_id,
+            statuses,
+            limit,
+            cursor,
+        };
+        self.repo
+            .list_for_user(&query)
+            .await
+            .map_err(AppError::Domain)
     }
 
     pub async fn add_comment(
@@ -182,12 +188,51 @@ where
         }
 
         let now = chrono::Utc::now();
-        let comment = TaskComment::create(task_id, caller_id, body, now).map_err(AppError::Domain)?;
+        let comment =
+            TaskComment::create(task_id, caller_id, body, now).map_err(AppError::Domain)?;
 
-        uow.comments().create(&comment).await.map_err(AppError::Domain)?;
+        uow.comments()
+            .create(&comment)
+            .await
+            .map_err(AppError::Domain)?;
         uow.commit().await.map_err(AppError::Domain)?;
 
         Ok(comment)
+    }
+
+    pub async fn list_comments(
+        &self,
+        caller_id: Uuid,
+        task_id: Uuid,
+    ) -> Result<Vec<TaskComment>, AppError> {
+        let caller_id = UserId::from_uuid(caller_id);
+        let task_id = TaskId::from_uuid(task_id);
+
+        let mut uow = self.uow_factory.begin().await.map_err(AppError::Domain)?;
+
+        let task = uow
+            .tasks()
+            .find_by_id(&task_id)
+            .await
+            .map_err(AppError::Domain)?
+            .ok_or_else(|| {
+                AppError::Domain(DomainError::NotFound {
+                    resource_type: "Task".into(),
+                    identifier: task_id.as_uuid().to_string(),
+                })
+            })?;
+
+        let can_view = task.created_by() == &caller_id || task.assignee_id() == &caller_id;
+        if !can_view {
+            return Err(AppError::Domain(DomainError::Forbidden {
+                reason: "only the task creator or assignee may view comments on this task".into(),
+            }));
+        }
+
+        uow.comments()
+            .list_for_task(&task_id)
+            .await
+            .map_err(AppError::Domain)
     }
 
     pub async fn edit_task(

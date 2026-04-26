@@ -68,13 +68,12 @@ impl<'de> Deserialize<'de> for EmailField {
 
 #[derive(Debug, garde::Validate)]
 #[garde(transparent)]
-pub struct CommentBodyField(
-    #[garde(required, custom(validate_comment_body))] pub Option<String>,
-);
+pub struct CommentBodyField(#[garde(required, custom(validate_comment_body))] pub Option<String>);
 
 impl CommentBodyField {
     pub fn into_string(self) -> String {
-        self.0.expect("CommentBodyField must be validated before access")
+        self.0
+            .expect("CommentBodyField must be validated before access")
     }
 }
 

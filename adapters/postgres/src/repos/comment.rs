@@ -5,9 +5,7 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use servicez_domain::{
-    error::DomainError,
-    ports::TaskCommentRepository,
-    task_comment::TaskComment,
+    error::DomainError, ports::TaskCommentRepository, task_comment::TaskComment,
 };
 
 fn db_err(op: &str, e: sqlx::Error) -> DomainError {
@@ -63,6 +61,28 @@ impl TaskCommentRepository for PostgresTaskCommentRepository {
             .map_err(|e| db_err("create", e))
         }
     }
+
+    fn list_for_task(
+        &self,
+        task_id: &servicez_domain::task::TaskId,
+    ) -> impl std::future::Future<Output = Result<Vec<TaskComment>, DomainError>> + Send {
+        let pool = self.pool.clone();
+        let task_id_uuid = *task_id.as_uuid();
+
+        async move {
+            sqlx::query_as::<_, TaskCommentRow>(
+                "SELECT id, task_id, author_id, body, created_at, modified_by, modified_at \
+                 FROM task_comments \
+                 WHERE task_id = $1 \
+                 ORDER BY created_at ASC",
+            )
+            .bind(task_id_uuid)
+            .fetch_all(&pool)
+            .await
+            .map(|rows| rows.into_iter().map(TaskComment::from).collect())
+            .map_err(|e| db_err("list_for_task", e))
+        }
+    }
 }
 
 // ===== Transaction-backed repository =====
@@ -93,10 +113,12 @@ impl TaskCommentRepository for TxTaskCommentRepository {
 
         async move {
             let mut guard = tx.lock().await;
-            let conn = guard.as_deref_mut().ok_or_else(|| DomainError::Repository {
-                operation: "create".to_owned(),
-                message: "transaction already committed or rolled back".to_owned(),
-            })?;
+            let conn = guard
+                .as_deref_mut()
+                .ok_or_else(|| DomainError::Repository {
+                    operation: "create".to_owned(),
+                    message: "transaction already committed or rolled back".to_owned(),
+                })?;
 
             sqlx::query(
                 "INSERT INTO task_comments \
@@ -114,6 +136,36 @@ impl TaskCommentRepository for TxTaskCommentRepository {
             .await
             .map(|_| ())
             .map_err(|e| db_err("create", e))
+        }
+    }
+
+    fn list_for_task(
+        &self,
+        task_id: &servicez_domain::task::TaskId,
+    ) -> impl std::future::Future<Output = Result<Vec<TaskComment>, DomainError>> + Send {
+        let tx = Arc::clone(&self.tx);
+        let task_id_uuid = *task_id.as_uuid();
+
+        async move {
+            let mut guard = tx.lock().await;
+            let conn = guard
+                .as_deref_mut()
+                .ok_or_else(|| DomainError::Repository {
+                    operation: "list_for_task".to_owned(),
+                    message: "transaction already committed or rolled back".to_owned(),
+                })?;
+
+            sqlx::query_as::<_, TaskCommentRow>(
+                "SELECT id, task_id, author_id, body, created_at, modified_by, modified_at \
+                 FROM task_comments \
+                 WHERE task_id = $1 \
+                 ORDER BY created_at ASC",
+            )
+            .bind(task_id_uuid)
+            .fetch_all(conn)
+            .await
+            .map(|rows| rows.into_iter().map(TaskComment::from).collect())
+            .map_err(|e| db_err("list_for_task", e))
         }
     }
 }

@@ -45,7 +45,12 @@ impl UnitOfWorkFactory for PostgresUowFactory {
         let tasks = TxTaskRepository::new(Arc::clone(&tx));
         let comments = TxTaskCommentRepository::new(Arc::clone(&tx));
 
-        Ok(PostgresUnitOfWork { tx, users, tasks, comments })
+        Ok(PostgresUnitOfWork {
+            tx,
+            users,
+            tasks,
+            comments,
+        })
     }
 }
 

@@ -6,7 +6,7 @@ use uuid::Uuid;
 use servicez_application::error::AppError;
 use servicez_http::{
     routes::tasks::TaskOperations,
-    schemas::response::{CommentResponse, TaskPageResponse, TaskResponse},
+    schemas::response::{CommentListResponse, CommentResponse, TaskPageResponse, TaskResponse},
 };
 
 use super::state::AppState;
@@ -67,9 +67,9 @@ impl TaskOperations for AppState {
         let svc = Arc::clone(&self.task_service);
         async move {
             let page = svc.list_tasks(caller_id, statuses, limit, cursor).await?;
-            let next_cursor = page.next_cursor.map(|c| {
-                servicez_http::cursor::encode(c.created_at, *c.id.as_uuid())
-            });
+            let next_cursor = page
+                .next_cursor
+                .map(|c| servicez_http::cursor::encode(c.created_at, *c.id.as_uuid()));
             Ok(TaskPageResponse {
                 items: page.items.into_iter().map(TaskResponse::from).collect(),
                 next_cursor,
@@ -84,6 +84,24 @@ impl TaskOperations for AppState {
         body: String,
     ) -> impl std::future::Future<Output = Result<CommentResponse, AppError>> + Send {
         let svc = Arc::clone(&self.task_service);
-        async move { svc.add_comment(caller_id, task_id, body).await.map(CommentResponse::from) }
+        async move {
+            svc.add_comment(caller_id, task_id, body)
+                .await
+                .map(CommentResponse::from)
+        }
+    }
+
+    fn list_comments(
+        &self,
+        caller_id: Uuid,
+        task_id: Uuid,
+    ) -> impl std::future::Future<Output = Result<CommentListResponse, AppError>> + Send {
+        let svc = Arc::clone(&self.task_service);
+        async move {
+            let comments = svc.list_comments(caller_id, task_id).await?;
+            Ok(CommentListResponse {
+                items: comments.into_iter().map(CommentResponse::from).collect(),
+            })
+        }
     }
 }

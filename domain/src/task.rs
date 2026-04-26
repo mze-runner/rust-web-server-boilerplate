@@ -47,10 +47,16 @@ impl TaskStatus {
     pub fn can_transition_to(&self, next: &TaskStatus) -> bool {
         match self {
             TaskStatus::Planning => {
-                matches!(next, TaskStatus::InProgress | TaskStatus::Done | TaskStatus::Cancelled)
+                matches!(
+                    next,
+                    TaskStatus::InProgress | TaskStatus::Done | TaskStatus::Cancelled
+                )
             }
             TaskStatus::InProgress => {
-                matches!(next, TaskStatus::Planning | TaskStatus::Done | TaskStatus::Cancelled)
+                matches!(
+                    next,
+                    TaskStatus::Planning | TaskStatus::Done | TaskStatus::Cancelled
+                )
             }
             TaskStatus::Done | TaskStatus::Cancelled => false,
         }

@@ -141,16 +141,12 @@ impl From<AppError> for ProblemDetails {
                                 from, to, reason
                             ))
                     }
-                    DomainError::ImmutableResource => {
-                        ProblemDetails::new(
-                            StatusCode::UNPROCESSABLE_ENTITY,
-                            "Unprocessable Entity",
-                        )
-                        .with_code("domain.immutable_resource")
-                        .with_detail(
-                            "cannot mutate a task in Done or Cancelled status".to_owned(),
-                        )
-                    }
+                    DomainError::ImmutableResource => ProblemDetails::new(
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        "Unprocessable Entity",
+                    )
+                    .with_code("domain.immutable_resource")
+                    .with_detail("cannot mutate a task in Done or Cancelled status".to_owned()),
                     DomainError::Repository { .. } => {
                         // Infrastructure details must not reach the client.
                         ProblemDetails::new(
@@ -299,8 +295,7 @@ pub fn invalid_json_problem() -> ProblemDetails {
 }
 
 pub fn validation_failed_problem() -> ProblemDetails {
-    ProblemDetails::new(StatusCode::BAD_REQUEST, "Validation Failed")
-        .with_code("validation_failed")
+    ProblemDetails::new(StatusCode::BAD_REQUEST, "Validation Failed").with_code("validation_failed")
 }
 
 pub fn app_error_to_response(error: AppError, trace_id: impl Into<String>) -> Response {

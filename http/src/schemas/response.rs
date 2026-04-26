@@ -46,6 +46,7 @@ impl From<TaskComment> for CommentResponse {
 #[derive(Debug, Serialize)]
 pub struct CommentListResponse {
     pub items: Vec<CommentResponse>,
+    pub next_cursor: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

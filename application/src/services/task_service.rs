@@ -9,7 +9,7 @@ use servicez_domain::{
     error::DomainError,
     ports::{TaskCommentRepository, TaskRepository, UnitOfWork, UnitOfWorkFactory, UserRepository},
     task::{EditTaskCommand, ListTasksQuery, Task, TaskCursor, TaskId, TaskPage, TaskStatus},
-    task_comment::TaskComment,
+    task_comment::{CommentCursor, CommentPage, ListCommentsQuery, TaskComment, TaskCommentId},
     user::UserId,
 };
 
@@ -204,9 +204,15 @@ where
         &self,
         caller_id: Uuid,
         task_id: Uuid,
-    ) -> Result<Vec<TaskComment>, AppError> {
+        limit: u32,
+        cursor: Option<(DateTime<Utc>, Uuid)>,
+    ) -> Result<CommentPage, AppError> {
         let caller_id = UserId::from_uuid(caller_id);
         let task_id = TaskId::from_uuid(task_id);
+        let cursor = cursor.map(|(created_at, id)| CommentCursor {
+            created_at,
+            id: TaskCommentId::from_uuid(id),
+        });
 
         let mut uow = self.uow_factory.begin().await.map_err(AppError::Domain)?;
 
@@ -229,8 +235,13 @@ where
             }));
         }
 
+        let query = ListCommentsQuery {
+            task_id,
+            limit,
+            cursor,
+        };
         uow.comments()
-            .list_for_task(&task_id)
+            .list_for_task(&query)
             .await
             .map_err(AppError::Domain)
     }

@@ -7,6 +7,23 @@ use crate::user::UserId;
 crate::id::uuid_newtype!(TaskCommentId);
 
 #[derive(Clone, Debug)]
+pub struct CommentCursor {
+    pub created_at: DateTime<Utc>,
+    pub id: TaskCommentId,
+}
+
+pub struct ListCommentsQuery {
+    pub task_id: TaskId,
+    pub limit: u32,
+    pub cursor: Option<CommentCursor>,
+}
+
+pub struct CommentPage {
+    pub items: Vec<TaskComment>,
+    pub next_cursor: Option<CommentCursor>,
+}
+
+#[derive(Clone, Debug)]
 pub struct TaskComment {
     id: TaskCommentId,
     task_id: TaskId,

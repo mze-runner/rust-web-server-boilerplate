@@ -2,7 +2,7 @@ use std::future::Future;
 
 use crate::error::DomainError;
 use crate::task::{ListTasksQuery, Task, TaskPage};
-use crate::task_comment::TaskComment;
+use crate::task_comment::{CommentPage, ListCommentsQuery, TaskComment};
 use crate::user::{User, UserId};
 
 /// Read-only access to pre-seeded users.
@@ -40,8 +40,8 @@ pub trait TaskCommentRepository: Send + Sync {
 
     fn list_for_task(
         &self,
-        task_id: &crate::task::TaskId,
-    ) -> impl Future<Output = Result<Vec<TaskComment>, DomainError>> + Send;
+        query: &ListCommentsQuery,
+    ) -> impl Future<Output = Result<CommentPage, DomainError>> + Send;
 }
 
 /// Transactional unit of work. Owns a set of repositories that all share the

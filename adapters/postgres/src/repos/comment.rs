@@ -5,7 +5,9 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use servicez_domain::{
-    error::DomainError, ports::TaskCommentRepository, task_comment::TaskComment,
+    error::DomainError,
+    ports::TaskCommentRepository,
+    task_comment::{CommentCursor, CommentPage, ListCommentsQuery, TaskComment, TaskCommentId},
 };
 
 fn db_err(op: &str, e: sqlx::Error) -> DomainError {
@@ -13,6 +15,37 @@ fn db_err(op: &str, e: sqlx::Error) -> DomainError {
         operation: op.to_owned(),
         message: e.to_string(),
     }
+}
+
+fn build_list_sql(has_cursor: bool) -> String {
+    let mut sql = String::from(
+        "SELECT id, task_id, author_id, body, created_at, modified_by, modified_at \
+         FROM task_comments WHERE task_id = $1",
+    );
+    if has_cursor {
+        sql.push_str(" AND (created_at, id) > ($2, $3)");
+    }
+    sql.push_str(" ORDER BY created_at ASC, id ASC");
+    let limit_idx = if has_cursor { 4 } else { 2 };
+    sql.push_str(&format!(" LIMIT ${limit_idx}"));
+    sql
+}
+
+fn build_page(mut rows: Vec<TaskCommentRow>, limit: u32) -> CommentPage {
+    let has_next = rows.len() > limit as usize;
+    if has_next {
+        rows.truncate(limit as usize);
+    }
+    let items: Vec<TaskComment> = rows.into_iter().map(TaskComment::from).collect();
+    let next_cursor = if has_next {
+        items.last().map(|c| CommentCursor {
+            created_at: c.created_at(),
+            id: c.id().clone(),
+        })
+    } else {
+        None
+    };
+    CommentPage { items, next_cursor }
 }
 
 // ===== Pool-backed repository =====
@@ -64,23 +97,30 @@ impl TaskCommentRepository for PostgresTaskCommentRepository {
 
     fn list_for_task(
         &self,
-        task_id: &servicez_domain::task::TaskId,
-    ) -> impl std::future::Future<Output = Result<Vec<TaskComment>, DomainError>> + Send {
+        query: &ListCommentsQuery,
+    ) -> impl std::future::Future<Output = Result<CommentPage, DomainError>> + Send {
         let pool = self.pool.clone();
-        let task_id_uuid = *task_id.as_uuid();
+        let task_id_uuid = *query.task_id.as_uuid();
+        let limit = query.limit;
+        let cursor = query
+            .cursor
+            .as_ref()
+            .map(|c| (c.created_at, *c.id.as_uuid()));
 
         async move {
-            sqlx::query_as::<_, TaskCommentRow>(
-                "SELECT id, task_id, author_id, body, created_at, modified_by, modified_at \
-                 FROM task_comments \
-                 WHERE task_id = $1 \
-                 ORDER BY created_at ASC",
-            )
-            .bind(task_id_uuid)
-            .fetch_all(&pool)
-            .await
-            .map(|rows| rows.into_iter().map(TaskComment::from).collect())
-            .map_err(|e| db_err("list_for_task", e))
+            let sql = build_list_sql(cursor.is_some());
+            let mut q = sqlx::query_as::<_, TaskCommentRow>(&sql).bind(task_id_uuid);
+            if let Some((cur_at, cur_id)) = cursor {
+                q = q.bind(cur_at).bind(cur_id);
+            }
+            q = q.bind(limit as i64 + 1);
+
+            let rows = q
+                .fetch_all(&pool)
+                .await
+                .map_err(|e| db_err("list_for_task", e))?;
+
+            Ok(build_page(rows, limit))
         }
     }
 }
@@ -141,10 +181,15 @@ impl TaskCommentRepository for TxTaskCommentRepository {
 
     fn list_for_task(
         &self,
-        task_id: &servicez_domain::task::TaskId,
-    ) -> impl std::future::Future<Output = Result<Vec<TaskComment>, DomainError>> + Send {
+        query: &ListCommentsQuery,
+    ) -> impl std::future::Future<Output = Result<CommentPage, DomainError>> + Send {
         let tx = Arc::clone(&self.tx);
-        let task_id_uuid = *task_id.as_uuid();
+        let task_id_uuid = *query.task_id.as_uuid();
+        let limit = query.limit;
+        let cursor = query
+            .cursor
+            .as_ref()
+            .map(|c| (c.created_at, *c.id.as_uuid()));
 
         async move {
             let mut guard = tx.lock().await;
@@ -155,17 +200,19 @@ impl TaskCommentRepository for TxTaskCommentRepository {
                     message: "transaction already committed or rolled back".to_owned(),
                 })?;
 
-            sqlx::query_as::<_, TaskCommentRow>(
-                "SELECT id, task_id, author_id, body, created_at, modified_by, modified_at \
-                 FROM task_comments \
-                 WHERE task_id = $1 \
-                 ORDER BY created_at ASC",
-            )
-            .bind(task_id_uuid)
-            .fetch_all(conn)
-            .await
-            .map(|rows| rows.into_iter().map(TaskComment::from).collect())
-            .map_err(|e| db_err("list_for_task", e))
+            let sql = build_list_sql(cursor.is_some());
+            let mut q = sqlx::query_as::<_, TaskCommentRow>(&sql).bind(task_id_uuid);
+            if let Some((cur_at, cur_id)) = cursor {
+                q = q.bind(cur_at).bind(cur_id);
+            }
+            q = q.bind(limit as i64 + 1);
+
+            let rows = q
+                .fetch_all(conn)
+                .await
+                .map_err(|e| db_err("list_for_task", e))?;
+
+            Ok(build_page(rows, limit))
         }
     }
 }
@@ -185,7 +232,7 @@ pub struct TaskCommentRow {
 
 impl From<TaskCommentRow> for TaskComment {
     fn from(row: TaskCommentRow) -> Self {
-        use servicez_domain::{task::TaskId, task_comment::TaskCommentId, user::UserId};
+        use servicez_domain::{task::TaskId, user::UserId};
         TaskComment::from_row(
             TaskCommentId::from_uuid(row.id),
             TaskId::from_uuid(row.task_id),

@@ -111,4 +111,27 @@ impl TaskComment {
     pub fn modified_at(&self) -> DateTime<Utc> {
         self.modified_at
     }
+
+    pub fn edit(
+        &mut self,
+        new_body: String,
+        editor: UserId,
+        now: DateTime<Utc>,
+    ) -> Result<(), DomainError> {
+        let body = new_body.trim().to_owned();
+        if body.is_empty() {
+            return Err(DomainError::InvariantViolation {
+                message: "body must not be blank".into(),
+            });
+        }
+        if body.chars().count() > 1000 {
+            return Err(DomainError::InvariantViolation {
+                message: "body must be at most 1000 characters".into(),
+            });
+        }
+        self.body = body;
+        self.modified_by = editor;
+        self.modified_at = now;
+        Ok(())
+    }
 }

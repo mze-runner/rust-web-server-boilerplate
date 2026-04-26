@@ -110,4 +110,19 @@ impl TaskOperations for AppState {
             })
         }
     }
+
+    fn edit_comment(
+        &self,
+        caller_id: Uuid,
+        task_id: Uuid,
+        comment_id: Uuid,
+        body: String,
+    ) -> impl std::future::Future<Output = Result<CommentResponse, AppError>> + Send {
+        let svc = Arc::clone(&self.task_service);
+        async move {
+            svc.edit_comment(caller_id, task_id, comment_id, body)
+                .await
+                .map(CommentResponse::from)
+        }
+    }
 }

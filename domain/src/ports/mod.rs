@@ -2,7 +2,7 @@ use std::future::Future;
 
 use crate::error::DomainError;
 use crate::task::{ListTasksQuery, Task, TaskPage};
-use crate::task_comment::{CommentPage, ListCommentsQuery, TaskComment};
+use crate::task_comment::{CommentPage, ListCommentsQuery, TaskComment, TaskCommentId};
 use crate::user::{User, UserId};
 
 /// Read-only access to pre-seeded users.
@@ -36,6 +36,14 @@ pub trait TaskRepository: Send + Sync {
 /// Write access to task comments.
 pub trait TaskCommentRepository: Send + Sync {
     fn create(&self, comment: &TaskComment)
+        -> impl Future<Output = Result<(), DomainError>> + Send;
+
+    fn find_by_id(
+        &self,
+        id: &TaskCommentId,
+    ) -> impl Future<Output = Result<Option<TaskComment>, DomainError>> + Send;
+
+    fn update(&self, comment: &TaskComment)
         -> impl Future<Output = Result<(), DomainError>> + Send;
 
     fn list_for_task(

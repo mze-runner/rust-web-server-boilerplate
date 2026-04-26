@@ -246,6 +246,78 @@ where
             .map_err(AppError::Domain)
     }
 
+    pub async fn edit_comment(
+        &self,
+        caller_id: Uuid,
+        task_id: Uuid,
+        comment_id: Uuid,
+        body: String,
+    ) -> Result<TaskComment, AppError> {
+        let caller_id = UserId::from_uuid(caller_id);
+        let task_id = TaskId::from_uuid(task_id);
+        let comment_id = TaskCommentId::from_uuid(comment_id);
+
+        let mut uow = self.uow_factory.begin().await.map_err(AppError::Domain)?;
+
+        let task = uow
+            .tasks()
+            .find_by_id(&task_id)
+            .await
+            .map_err(AppError::Domain)?
+            .ok_or_else(|| {
+                AppError::Domain(DomainError::NotFound {
+                    resource_type: "Task".into(),
+                    identifier: task_id.as_uuid().to_string(),
+                })
+            })?;
+
+        let is_visible = task.created_by() == &caller_id || task.assignee_id() == &caller_id;
+        if !is_visible {
+            return Err(AppError::Domain(DomainError::NotFound {
+                resource_type: "Task".into(),
+                identifier: task_id.as_uuid().to_string(),
+            }));
+        }
+
+        let mut comment = uow
+            .comments()
+            .find_by_id(&comment_id)
+            .await
+            .map_err(AppError::Domain)?
+            .ok_or_else(|| {
+                AppError::Domain(DomainError::NotFound {
+                    resource_type: "TaskComment".into(),
+                    identifier: comment_id.as_uuid().to_string(),
+                })
+            })?;
+
+        if comment.task_id() != &task_id {
+            return Err(AppError::Domain(DomainError::NotFound {
+                resource_type: "TaskComment".into(),
+                identifier: comment_id.as_uuid().to_string(),
+            }));
+        }
+
+        if comment.author_id() != &caller_id {
+            return Err(AppError::Domain(DomainError::Forbidden {
+                reason: "only the comment author may edit this comment".into(),
+            }));
+        }
+
+        let now = chrono::Utc::now();
+        comment
+            .edit(body, caller_id, now)
+            .map_err(AppError::Domain)?;
+
+        uow.comments()
+            .update(&comment)
+            .await
+            .map_err(AppError::Domain)?;
+        uow.commit().await.map_err(AppError::Domain)?;
+
+        Ok(comment)
+    }
+
     pub async fn edit_task(
         &self,
         caller_id: Uuid,

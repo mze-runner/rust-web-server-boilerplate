@@ -95,12 +95,18 @@ impl TaskOperations for AppState {
         &self,
         caller_id: Uuid,
         task_id: Uuid,
+        limit: u32,
+        cursor: Option<(DateTime<Utc>, Uuid)>,
     ) -> impl std::future::Future<Output = Result<CommentListResponse, AppError>> + Send {
         let svc = Arc::clone(&self.task_service);
         async move {
-            let comments = svc.list_comments(caller_id, task_id).await?;
+            let page = svc.list_comments(caller_id, task_id, limit, cursor).await?;
+            let next_cursor = page
+                .next_cursor
+                .map(|c| servicez_http::cursor::encode(c.created_at, *c.id.as_uuid()));
             Ok(CommentListResponse {
-                items: comments.into_iter().map(CommentResponse::from).collect(),
+                items: page.items.into_iter().map(CommentResponse::from).collect(),
+                next_cursor,
             })
         }
     }

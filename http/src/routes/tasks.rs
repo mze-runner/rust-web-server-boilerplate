@@ -69,6 +69,8 @@ pub trait TaskOperations: Clone + Send + Sync + 'static {
         &self,
         caller_id: Uuid,
         task_id: Uuid,
+        limit: u32,
+        cursor: Option<(DateTime<Utc>, Uuid)>,
     ) -> impl Future<Output = Result<CommentListResponse, AppError>> + Send;
 }
 
@@ -213,14 +215,45 @@ async fn add_comment_handler<S: TaskOperations>(
     }
 }
 
+#[derive(Deserialize)]
+struct ListCommentsParams {
+    #[serde(default = "default_limit")]
+    limit: u32,
+    cursor: Option<String>,
+}
+
 async fn list_comments_handler<S: TaskOperations>(
     State(state): State<Arc<S>>,
     Extension(trace): Extension<TraceId>,
     AuthenticatedUser(subject): AuthenticatedUser,
     Path(task_id): Path<Uuid>,
+    Query(params): Query<ListCommentsParams>,
 ) -> Response {
+    if params.limit > 100 {
+        return app_error_to_response(
+            AppError::BadRequest("limit must not exceed 100".into()),
+            trace.as_str(),
+        );
+    }
+
+    let cursor = match params.cursor {
+        None => None,
+        Some(ref s) => match crate::cursor::decode(s) {
+            Some(c) => Some(c),
+            None => {
+                return app_error_to_response(
+                    AppError::BadRequest("invalid cursor".into()),
+                    trace.as_str(),
+                )
+            }
+        },
+    };
+
     let caller_id = subject.0;
-    match state.list_comments(caller_id, task_id).await {
+    match state
+        .list_comments(caller_id, task_id, params.limit, cursor)
+        .await
+    {
         Ok(response) => (StatusCode::OK, Json(response)).into_response(),
         Err(e) => app_error_to_response(e, trace.as_str()),
     }

@@ -20,7 +20,7 @@ use crate::{
     middleware::trace::TraceId,
     schemas::{
         requests::{AddCommentRequest, AssignTaskRequest, CreateTaskRequest, EditTaskRequest},
-        response::{CommentResponse, TaskPageResponse, TaskResponse},
+        response::{CommentListResponse, CommentResponse, TaskPageResponse, TaskResponse},
     },
 };
 
@@ -64,6 +64,12 @@ pub trait TaskOperations: Clone + Send + Sync + 'static {
         task_id: Uuid,
         body: String,
     ) -> impl Future<Output = Result<CommentResponse, AppError>> + Send;
+
+    fn list_comments(
+        &self,
+        caller_id: Uuid,
+        task_id: Uuid,
+    ) -> impl Future<Output = Result<CommentListResponse, AppError>> + Send;
 }
 
 pub fn router<S>() -> Router<Arc<S>>
@@ -74,7 +80,10 @@ where
         .route("/", get(list_tasks_handler::<S>).post(create_task::<S>))
         .route("/{id}", patch(edit_task::<S>))
         .route("/{id}/assignee", put(assign_task_handler::<S>))
-        .route("/{id}/comments", axum::routing::post(add_comment_handler::<S>))
+        .route(
+            "/{id}/comments",
+            get(list_comments_handler::<S>).post(add_comment_handler::<S>),
+        )
 }
 
 #[derive(Deserialize)]
@@ -152,7 +161,10 @@ async fn assign_task_handler<S: TaskOperations>(
     ValidatedJson(body): ValidatedJson<AssignTaskRequest>,
 ) -> Response {
     let caller_id = subject.0;
-    match state.assign_task(caller_id, task_id, body.assignee_id).await {
+    match state
+        .assign_task(caller_id, task_id, body.assignee_id)
+        .await
+    {
         Ok(response) => (StatusCode::OK, Json(response)).into_response(),
         Err(e) => app_error_to_response(e, trace.as_str()),
     }
@@ -197,6 +209,19 @@ async fn add_comment_handler<S: TaskOperations>(
 
     match state.add_comment(caller_id, task_id, comment_body).await {
         Ok(response) => (StatusCode::CREATED, Json(response)).into_response(),
+        Err(e) => app_error_to_response(e, trace.as_str()),
+    }
+}
+
+async fn list_comments_handler<S: TaskOperations>(
+    State(state): State<Arc<S>>,
+    Extension(trace): Extension<TraceId>,
+    AuthenticatedUser(subject): AuthenticatedUser,
+    Path(task_id): Path<Uuid>,
+) -> Response {
+    let caller_id = subject.0;
+    match state.list_comments(caller_id, task_id).await {
+        Ok(response) => (StatusCode::OK, Json(response)).into_response(),
         Err(e) => app_error_to_response(e, trace.as_str()),
     }
 }

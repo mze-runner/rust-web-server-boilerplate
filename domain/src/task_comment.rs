@@ -56,7 +56,15 @@ impl TaskComment {
         modified_by: UserId,
         modified_at: DateTime<Utc>,
     ) -> Self {
-        Self { id, task_id, author_id, body, created_at, modified_by, modified_at }
+        Self {
+            id,
+            task_id,
+            author_id,
+            body,
+            created_at,
+            modified_by,
+            modified_at,
+        }
     }
 
     pub fn id(&self) -> &TaskCommentId {

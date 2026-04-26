@@ -31,8 +31,7 @@ pub fn router<S>() -> Router<Arc<S>>
 where
     S: ServiceHealth + TaskOperations,
 {
-    let public = Router::new()
-        .route("/api/v1/healthz", get(healthz::<S>));
+    let public = Router::new().route("/api/v1/healthz", get(healthz::<S>));
 
     let protected = Router::new()
         .nest("/api/v1/tasks", tasks::router::<S>())

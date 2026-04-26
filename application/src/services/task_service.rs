@@ -174,11 +174,10 @@ where
                 })
             })?;
 
-        let is_visible = task.created_by() == &caller_id || task.assignee_id() == &caller_id;
-        if !is_visible {
-            return Err(AppError::Domain(DomainError::NotFound {
-                resource_type: "Task".into(),
-                identifier: task_id.as_uuid().to_string(),
+        let can_comment = task.created_by() == &caller_id || task.assignee_id() == &caller_id;
+        if !can_comment {
+            return Err(AppError::Domain(DomainError::Forbidden {
+                reason: "only the task creator or assignee may comment on this task".into(),
             }));
         }
 

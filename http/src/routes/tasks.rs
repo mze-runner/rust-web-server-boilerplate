@@ -83,6 +83,13 @@ pub trait TaskOperations: Clone + Send + Sync + 'static {
         comment_id: Uuid,
         body: String,
     ) -> impl Future<Output = Result<CommentResponse, AppError>> + Send;
+
+    fn delete_comment(
+        &self,
+        caller_id: Uuid,
+        task_id: Uuid,
+        comment_id: Uuid,
+    ) -> impl Future<Output = Result<(), AppError>> + Send;
 }
 
 pub fn router<S>() -> Router<Arc<S>>
@@ -99,7 +106,7 @@ where
         )
         .route(
             "/{id}/comments/{comment_id}",
-            put(edit_comment_handler::<S>),
+            put(edit_comment_handler::<S>).delete(delete_comment_handler::<S>),
         )
 }
 
@@ -289,6 +296,20 @@ async fn edit_comment_handler<S: TaskOperations>(
         .await
     {
         Ok(response) => (StatusCode::OK, Json(response)).into_response(),
+        Err(e) => app_error_to_response(e, trace.as_str()),
+    }
+}
+
+async fn delete_comment_handler<S: TaskOperations>(
+    State(state): State<Arc<S>>,
+    Extension(trace): Extension<TraceId>,
+    AuthenticatedUser(subject): AuthenticatedUser,
+    Path((task_id, comment_id)): Path<(Uuid, Uuid)>,
+) -> Response {
+    let caller_id = subject.0;
+
+    match state.delete_comment(caller_id, task_id, comment_id).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => app_error_to_response(e, trace.as_str()),
     }
 }

@@ -141,6 +141,23 @@ impl TaskCommentRepository for PostgresTaskCommentRepository {
         }
     }
 
+    fn delete(
+        &self,
+        id: &TaskCommentId,
+    ) -> impl std::future::Future<Output = Result<(), DomainError>> + Send {
+        let pool = self.pool.clone();
+        let id_uuid = *id.as_uuid();
+
+        async move {
+            sqlx::query("DELETE FROM task_comments WHERE id = $1")
+                .bind(id_uuid)
+                .execute(&pool)
+                .await
+                .map(|_| ())
+                .map_err(|e| db_err("delete", e))
+        }
+    }
+
     fn list_for_task(
         &self,
         query: &ListCommentsQuery,
@@ -284,6 +301,31 @@ impl TaskCommentRepository for TxTaskCommentRepository {
             .await
             .map(|_| ())
             .map_err(|e| db_err("update", e))
+        }
+    }
+
+    fn delete(
+        &self,
+        id: &TaskCommentId,
+    ) -> impl std::future::Future<Output = Result<(), DomainError>> + Send {
+        let tx = Arc::clone(&self.tx);
+        let id_uuid = *id.as_uuid();
+
+        async move {
+            let mut guard = tx.lock().await;
+            let conn = guard
+                .as_deref_mut()
+                .ok_or_else(|| DomainError::Repository {
+                    operation: "delete".to_owned(),
+                    message: "transaction already committed or rolled back".to_owned(),
+                })?;
+
+            sqlx::query("DELETE FROM task_comments WHERE id = $1")
+                .bind(id_uuid)
+                .execute(conn)
+                .await
+                .map(|_| ())
+                .map_err(|e| db_err("delete", e))
         }
     }
 

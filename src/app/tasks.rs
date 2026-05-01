@@ -125,4 +125,14 @@ impl TaskOperations for AppState {
                 .map(CommentResponse::from)
         }
     }
+
+    fn delete_comment(
+        &self,
+        caller_id: Uuid,
+        task_id: Uuid,
+        comment_id: Uuid,
+    ) -> impl std::future::Future<Output = Result<(), AppError>> + Send {
+        let svc = Arc::clone(&self.task_service);
+        async move { svc.delete_comment(caller_id, task_id, comment_id).await }
+    }
 }

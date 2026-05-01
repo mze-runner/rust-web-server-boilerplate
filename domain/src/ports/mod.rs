@@ -46,6 +46,8 @@ pub trait TaskCommentRepository: Send + Sync {
     fn update(&self, comment: &TaskComment)
         -> impl Future<Output = Result<(), DomainError>> + Send;
 
+    fn delete(&self, id: &TaskCommentId) -> impl Future<Output = Result<(), DomainError>> + Send;
+
     fn list_for_task(
         &self,
         query: &ListCommentsQuery,

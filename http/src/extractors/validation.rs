@@ -5,8 +5,8 @@ use crate::{
     middleware::trace::TraceId,
 };
 use axum::{
-    extract::{FromRequest, Request},
-    http::StatusCode,
+    extract::{FromRequest, FromRequestParts, Query, Request},
+    http::{request::Parts, StatusCode},
     Json,
 };
 use garde::Validate;
@@ -48,6 +48,49 @@ where
         }
 
         Ok(ValidatedJson(value))
+    }
+}
+
+/// Wraps a T that implements Deserialize + garde::Validate for query parameters.
+/// If parsing or validation fails, rejects the request with 400 and a JSON body.
+pub struct ValidatedQuery<T>(pub T);
+
+impl<S, T> FromRequestParts<S> for ValidatedQuery<T>
+where
+    S: Send + Sync,
+    T: DeserializeOwned + Validate + Send,
+    <T as Validate>::Context: Default,
+{
+    type Rejection = (StatusCode, Json<crate::error::ProblemDetails>);
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let trace_id = parts.extensions.get::<TraceId>().map(|t| t.0.clone());
+
+        let Query(value) = Query::<T>::from_request_parts(parts, state)
+            .await
+            .map_err(|e| {
+                let mut problem =
+                    validation_failed_problem().with_field_errors(vec![FieldError {
+                        field: "_query".to_string(),
+                        message: e.body_text(),
+                    }]);
+                if let Some(tid) = &trace_id {
+                    problem = problem.with_trace_id(tid.clone());
+                }
+                (StatusCode::BAD_REQUEST, Json(problem))
+            })?;
+
+        if let Err(report) = value.validate() {
+            tracing::debug!(?report, "Validation failed");
+            let mut problem = validation_failed_problem()
+                .with_field_errors(garde_report_to_field_errors(&report));
+            if let Some(tid) = trace_id {
+                problem = problem.with_trace_id(tid);
+            }
+            return Err((StatusCode::BAD_REQUEST, Json(problem)));
+        }
+
+        Ok(ValidatedQuery(value))
     }
 }
 

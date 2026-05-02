@@ -2,26 +2,25 @@ use std::future::Future;
 use std::sync::Arc;
 
 use axum::{
-    extract::{Extension, Path, Query, State},
+    extract::{Extension, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, patch, put},
     Json, Router,
 };
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
 use uuid::Uuid;
 
 use servicez_application::error::AppError;
 
 use crate::{
     error::app_error_to_response,
-    extractors::{auth::AuthenticatedUser, validation::ValidatedJson},
+    extractors::{auth::AuthenticatedUser, validation::{ValidatedJson, ValidatedQuery}},
     middleware::trace::TraceId,
     schemas::{
         requests::{
             AddCommentRequest, AssignTaskRequest, CreateTaskRequest, EditCommentRequest,
-            EditTaskRequest,
+            EditTaskRequest, ListCommentsParams, ListTasksParams,
         },
         response::{CommentListResponse, CommentResponse, TaskPageResponse, TaskResponse},
     },
@@ -110,32 +109,12 @@ where
         )
 }
 
-#[derive(Deserialize)]
-struct ListTasksParams {
-    #[serde(default, rename = "status")]
-    statuses: Vec<String>,
-    #[serde(default = "default_limit")]
-    limit: u32,
-    cursor: Option<String>,
-}
-
-fn default_limit() -> u32 {
-    20
-}
-
 async fn list_tasks_handler<S: TaskOperations>(
     State(state): State<Arc<S>>,
     Extension(trace): Extension<TraceId>,
     AuthenticatedUser(subject): AuthenticatedUser,
-    Query(params): Query<ListTasksParams>,
+    ValidatedQuery(params): ValidatedQuery<ListTasksParams>,
 ) -> Response {
-    if params.limit > 100 {
-        return app_error_to_response(
-            AppError::BadRequest("limit must not exceed 100".into()),
-            trace.as_str(),
-        );
-    }
-
     let cursor = match params.cursor {
         None => None,
         Some(ref s) => match crate::cursor::decode(s) {
@@ -150,7 +129,7 @@ async fn list_tasks_handler<S: TaskOperations>(
     };
 
     match state
-        .list_tasks(subject.0, params.statuses, params.limit, cursor)
+        .list_tasks(subject.0, params.statuses, params.limit.0, cursor)
         .await
     {
         Ok(page) => (StatusCode::OK, Json(page)).into_response(),
@@ -237,27 +216,13 @@ async fn add_comment_handler<S: TaskOperations>(
     }
 }
 
-#[derive(Deserialize)]
-struct ListCommentsParams {
-    #[serde(default = "default_limit")]
-    limit: u32,
-    cursor: Option<String>,
-}
-
 async fn list_comments_handler<S: TaskOperations>(
     State(state): State<Arc<S>>,
     Extension(trace): Extension<TraceId>,
     AuthenticatedUser(subject): AuthenticatedUser,
     Path(task_id): Path<Uuid>,
-    Query(params): Query<ListCommentsParams>,
+    ValidatedQuery(params): ValidatedQuery<ListCommentsParams>,
 ) -> Response {
-    if params.limit > 100 {
-        return app_error_to_response(
-            AppError::BadRequest("limit must not exceed 100".into()),
-            trace.as_str(),
-        );
-    }
-
     let cursor = match params.cursor {
         None => None,
         Some(ref s) => match crate::cursor::decode(s) {
@@ -273,7 +238,7 @@ async fn list_comments_handler<S: TaskOperations>(
 
     let caller_id = subject.0;
     match state
-        .list_comments(caller_id, task_id, params.limit, cursor)
+        .list_comments(caller_id, task_id, params.limit.0, cursor)
         .await
     {
         Ok(response) => (StatusCode::OK, Json(response)).into_response(),

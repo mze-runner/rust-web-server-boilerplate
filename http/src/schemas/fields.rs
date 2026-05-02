@@ -64,6 +64,18 @@ impl<'de> Deserialize<'de> for EmailField {
     }
 }
 
+// Pagination Fields
+
+#[derive(Debug, Deserialize, garde::Validate)]
+#[garde(transparent)]
+pub struct PaginationLimitField(#[garde(range(max = 100))] pub u32);
+
+impl Default for PaginationLimitField {
+    fn default() -> Self {
+        Self(20)
+    }
+}
+
 // Comment Fields
 
 #[derive(Debug, garde::Validate)]

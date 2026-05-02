@@ -1,7 +1,8 @@
 use uuid::Uuid;
 
 use crate::schemas::fields::{
-    CommentBodyField, EmailField, PasswordField, TaskDescriptionField, TaskSubjectField,
+    CommentBodyField, EmailField, PaginationLimitField, PasswordField, TaskDescriptionField,
+    TaskSubjectField,
 };
 use serde::Deserialize;
 
@@ -13,6 +14,31 @@ pub struct SignupRequest {
     pub email: EmailField,
     #[garde(dive)]
     pub password: PasswordField,
+}
+
+// Task Query Params
+
+#[derive(Debug, Deserialize, garde::Validate)]
+#[serde(deny_unknown_fields)]
+pub struct ListTasksParams {
+    #[serde(default, rename = "status")]
+    #[garde(skip)]
+    pub statuses: Vec<String>,
+    #[serde(default)]
+    #[garde(dive)]
+    pub limit: PaginationLimitField,
+    #[garde(skip)]
+    pub cursor: Option<String>,
+}
+
+#[derive(Debug, Deserialize, garde::Validate)]
+#[serde(deny_unknown_fields)]
+pub struct ListCommentsParams {
+    #[serde(default)]
+    #[garde(dive)]
+    pub limit: PaginationLimitField,
+    #[garde(skip)]
+    pub cursor: Option<String>,
 }
 
 // Tasks Requests

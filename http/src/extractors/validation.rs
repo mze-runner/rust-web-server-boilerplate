@@ -5,10 +5,11 @@ use crate::{
     middleware::trace::TraceId,
 };
 use axum::{
-    extract::{FromRequest, FromRequestParts, Query, Request},
+    extract::{FromRequest, FromRequestParts, Request},
     http::{request::Parts, StatusCode},
     Json,
 };
+use axum_extra::extract::Query;
 use garde::Validate;
 use serde::de::DeserializeOwned;
 

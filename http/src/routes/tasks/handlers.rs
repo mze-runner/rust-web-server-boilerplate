@@ -1,115 +1,31 @@
-use std::future::Future;
 use std::sync::Arc;
 
 use axum::{
     extract::{Extension, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, patch, put},
-    Json, Router,
+    Json,
 };
-use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use servicez_application::error::AppError;
 
 use crate::{
     error::app_error_to_response,
-    extractors::{auth::AuthenticatedUser, validation::{ValidatedJson, ValidatedQuery}},
+    extractors::{
+        auth::AuthenticatedUser,
+        validation::{ValidatedJson, ValidatedQuery},
+    },
     middleware::trace::TraceId,
-    schemas::{
-        requests::{
-            AddCommentRequest, AssignTaskRequest, CreateTaskRequest, EditCommentRequest,
-            EditTaskRequest, ListCommentsParams, ListTasksParams,
-        },
-        response::{CommentListResponse, CommentResponse, TaskPageResponse, TaskResponse},
+    schemas::requests::{
+        AddCommentRequest, AssignTaskRequest, CreateTaskRequest, EditCommentRequest,
+        EditTaskRequest, ListCommentsParams, ListTasksParams,
     },
 };
 
-/// Port contract for task operations — implemented by `AppState` in the composition root.
-pub trait TaskOperations: Clone + Send + Sync + 'static {
-    fn create_task(
-        &self,
-        caller_id: Uuid,
-        subject: String,
-        description: Option<String>,
-        assignee_id: Option<Uuid>,
-    ) -> impl Future<Output = Result<TaskResponse, AppError>> + Send;
+use super::TaskOperations;
 
-    fn edit_task(
-        &self,
-        caller_id: Uuid,
-        task_id: Uuid,
-        subject: Option<String>,
-        description: Option<Option<String>>,
-        status: Option<String>,
-    ) -> impl Future<Output = Result<TaskResponse, AppError>> + Send;
-
-    fn assign_task(
-        &self,
-        caller_id: Uuid,
-        task_id: Uuid,
-        assignee_id: Uuid,
-    ) -> impl Future<Output = Result<TaskResponse, AppError>> + Send;
-
-    fn list_tasks(
-        &self,
-        caller_id: Uuid,
-        statuses: Vec<String>,
-        limit: u32,
-        cursor: Option<(DateTime<Utc>, Uuid)>,
-    ) -> impl Future<Output = Result<TaskPageResponse, AppError>> + Send;
-
-    fn add_comment(
-        &self,
-        caller_id: Uuid,
-        task_id: Uuid,
-        body: String,
-    ) -> impl Future<Output = Result<CommentResponse, AppError>> + Send;
-
-    fn list_comments(
-        &self,
-        caller_id: Uuid,
-        task_id: Uuid,
-        limit: u32,
-        cursor: Option<(DateTime<Utc>, Uuid)>,
-    ) -> impl Future<Output = Result<CommentListResponse, AppError>> + Send;
-
-    fn edit_comment(
-        &self,
-        caller_id: Uuid,
-        task_id: Uuid,
-        comment_id: Uuid,
-        body: String,
-    ) -> impl Future<Output = Result<CommentResponse, AppError>> + Send;
-
-    fn delete_comment(
-        &self,
-        caller_id: Uuid,
-        task_id: Uuid,
-        comment_id: Uuid,
-    ) -> impl Future<Output = Result<(), AppError>> + Send;
-}
-
-pub fn router<S>() -> Router<Arc<S>>
-where
-    S: TaskOperations,
-{
-    Router::new()
-        .route("/", get(list_tasks_handler::<S>).post(create_task::<S>))
-        .route("/{id}", patch(edit_task::<S>))
-        .route("/{id}/assignee", put(assign_task_handler::<S>))
-        .route(
-            "/{id}/comments",
-            get(list_comments_handler::<S>).post(add_comment_handler::<S>),
-        )
-        .route(
-            "/{id}/comments/{comment_id}",
-            put(edit_comment_handler::<S>).delete(delete_comment_handler::<S>),
-        )
-}
-
-async fn list_tasks_handler<S: TaskOperations>(
+pub async fn list_tasks_handler<S: TaskOperations>(
     State(state): State<Arc<S>>,
     Extension(trace): Extension<TraceId>,
     AuthenticatedUser(subject): AuthenticatedUser,
@@ -137,7 +53,7 @@ async fn list_tasks_handler<S: TaskOperations>(
     }
 }
 
-async fn create_task<S: TaskOperations>(
+pub async fn create_task<S: TaskOperations>(
     State(state): State<Arc<S>>,
     Extension(trace): Extension<TraceId>,
     AuthenticatedUser(subject): AuthenticatedUser,
@@ -156,7 +72,7 @@ async fn create_task<S: TaskOperations>(
     }
 }
 
-async fn assign_task_handler<S: TaskOperations>(
+pub async fn assign_task_handler<S: TaskOperations>(
     State(state): State<Arc<S>>,
     Extension(trace): Extension<TraceId>,
     AuthenticatedUser(subject): AuthenticatedUser,
@@ -173,7 +89,7 @@ async fn assign_task_handler<S: TaskOperations>(
     }
 }
 
-async fn edit_task<S: TaskOperations>(
+pub async fn edit_task<S: TaskOperations>(
     State(state): State<Arc<S>>,
     Extension(trace): Extension<TraceId>,
     AuthenticatedUser(subject): AuthenticatedUser,
@@ -200,7 +116,7 @@ async fn edit_task<S: TaskOperations>(
     }
 }
 
-async fn add_comment_handler<S: TaskOperations>(
+pub async fn add_comment_handler<S: TaskOperations>(
     State(state): State<Arc<S>>,
     Extension(trace): Extension<TraceId>,
     AuthenticatedUser(subject): AuthenticatedUser,
@@ -216,7 +132,7 @@ async fn add_comment_handler<S: TaskOperations>(
     }
 }
 
-async fn list_comments_handler<S: TaskOperations>(
+pub async fn list_comments_handler<S: TaskOperations>(
     State(state): State<Arc<S>>,
     Extension(trace): Extension<TraceId>,
     AuthenticatedUser(subject): AuthenticatedUser,
@@ -246,7 +162,7 @@ async fn list_comments_handler<S: TaskOperations>(
     }
 }
 
-async fn edit_comment_handler<S: TaskOperations>(
+pub async fn edit_comment_handler<S: TaskOperations>(
     State(state): State<Arc<S>>,
     Extension(trace): Extension<TraceId>,
     AuthenticatedUser(subject): AuthenticatedUser,
@@ -265,7 +181,7 @@ async fn edit_comment_handler<S: TaskOperations>(
     }
 }
 
-async fn delete_comment_handler<S: TaskOperations>(
+pub async fn delete_comment_handler<S: TaskOperations>(
     State(state): State<Arc<S>>,
     Extension(trace): Extension<TraceId>,
     AuthenticatedUser(subject): AuthenticatedUser,

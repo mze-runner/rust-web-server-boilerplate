@@ -1,20 +1,24 @@
-# Forma
+# Forma *(beta)*
 
-Schema-driven validation with optional normalization for Rust web services.
+> **Don't Trust Your Client.**
+>
+> Input that reaches your service can be malformed, over-long, blank-but-not-empty, or subtly wrong in ways that only surface after it is stored. Validation alone is not enough — raw values must be normalized into a canonical form first, so that what you validate is exactly what you will use.
 
-Inspired by [Joi](https://joi.dev/), this crate separates **normalization** (trimming, lowercasing) from **validation** (constraint checks) into two explicit phases, and exposes them through a fluent, const-constructible schema API.
+Schema-driven normalization and validation for Rust web services.
 
 ---
 
-## Why not garde?
+## Why Forma exists
 
-`garde`'s built-in rules operate on raw values with no understanding of string normalization:
+Attribute-based validation crates — well-designed and credit due to their authors — operate on raw deserialized values. That works for simple constraint checks, but falls apart in combined scenarios:
 
-- `length` counts **bytes**, not Unicode code points
-- No `not_blank` rule — blank rejection requires a custom function
-- No trim modifier — normalization cannot be expressed in attributes
+- A string that is technically non-empty but consists entirely of whitespace passes a `required` check yet carries no meaningful content.
+- Length limits applied to raw bytes rather than Unicode code points give different results for multibyte input.
+- There is no standard place to express "trim before you measure" — normalization and validation are conflated or left to the caller.
 
-Every text field ends up with a hand-written `validate_*` function, making garde's declarative syntax a no-op wrapper. This crate replaces that pattern with a design where normalization is a first-class concept.
+The result is hand-written `validate_*` functions scattered across every text field, which is exactly the boilerplate a declarative approach is supposed to eliminate.
+
+**Forma (beta)** was introduced to address these combined cases. It treats normalization as a first-class phase that runs before any constraint check, so that field types carry a guarantee: by the time a value is validated, it is already canonical.
 
 ---
 

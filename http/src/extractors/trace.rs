@@ -9,7 +9,7 @@ use axum::{extract::FromRequestParts, http::request::Parts};
 /// If no trace_id is found in extensions, it returns "unknown" as fallback.
 ///
 /// # Example
-/// ```rust
+/// ```rust,ignore
 /// pub async fn handler(
 ///     ExtractTraceId(trace_id): ExtractTraceId,
 /// ) -> impl IntoResponse {

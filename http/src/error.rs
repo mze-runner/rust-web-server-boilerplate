@@ -288,6 +288,24 @@ impl From<AppError> for ProblemDetails {
 //     }
 // }
 
+impl From<forma::FieldErrors> for ProblemDetails {
+    fn from(errors: forma::FieldErrors) -> Self {
+        let field_errors: Vec<FieldError> = errors
+            .into_inner()
+            .into_iter()
+            .map(|(path, v)| FieldError {
+                field: path,
+                message: v.message,
+            })
+            .collect();
+        let mut problem = validation_failed_problem();
+        if !field_errors.is_empty() {
+            problem = problem.with_field_errors(field_errors);
+        }
+        problem
+    }
+}
+
 pub fn invalid_json_problem() -> ProblemDetails {
     ProblemDetails::new(StatusCode::BAD_REQUEST, "Invalid JSON")
         .with_code("invalid_json")

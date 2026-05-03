@@ -6,55 +6,51 @@ use crate::schemas::fields::{
 };
 use serde::Deserialize;
 
-/// Request body for POST /providers/self/signup
-#[derive(Debug, Deserialize, garde::Validate)]
+// ── Auth ──────────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SignupRequest {
-    #[garde(dive)]
     pub email: EmailField,
-    #[garde(dive)]
     pub password: PasswordField,
 }
 
-// Task Query Params
-
-#[derive(Debug, Deserialize, garde::Validate)]
-#[serde(deny_unknown_fields)]
-pub struct ListTasksParams {
-    #[serde(default, rename = "status")]
-    #[garde(skip)]
-    pub statuses: Vec<String>,
-    #[serde(default)]
-    #[garde(dive)]
-    pub limit: PaginationLimitField,
-    #[garde(skip)]
-    pub cursor: Option<String>,
+impl forma::Validate for SignupRequest {
+    fn validate(&self) -> Result<(), forma::FieldErrors> {
+        let mut e = forma::FieldErrors::default();
+        e.merge("email", self.email.validate());
+        e.merge("password", self.password.validate());
+        e.finish()
+    }
 }
 
-#[derive(Debug, Deserialize, garde::Validate)]
+// ── Task Requests ─────────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ListCommentsParams {
+pub struct CreateTaskRequest {
+    pub subject: TaskSubjectField,
     #[serde(default)]
-    #[garde(dive)]
-    pub limit: PaginationLimitField,
-    #[garde(skip)]
-    pub cursor: Option<String>,
+    pub description: TaskDescriptionField,
+    pub assignee_id: Option<Uuid>,
 }
 
-// Tasks Requests
+impl forma::Validate for CreateTaskRequest {
+    fn validate(&self) -> Result<(), forma::FieldErrors> {
+        let mut e = forma::FieldErrors::default();
+        e.merge("subject", self.subject.validate());
+        e.merge("description", self.description.validate());
+        e.finish()
+    }
+}
 
-#[derive(Debug, Deserialize, garde::Validate)]
+#[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EditTaskRequest {
-    #[garde(dive)]
     #[serde(default)]
     pub subject: Option<TaskSubjectField>,
-
-    #[garde(dive)]
     #[serde(default)]
     pub description: Option<TaskDescriptionField>,
-
-    #[garde(skip)]
     #[serde(default)]
     pub status: Option<String>,
 }
@@ -65,35 +61,93 @@ impl EditTaskRequest {
     }
 }
 
-#[derive(Debug, Deserialize, garde::Validate)]
+impl forma::Validate for EditTaskRequest {
+    fn validate(&self) -> Result<(), forma::FieldErrors> {
+        let mut e = forma::FieldErrors::default();
+        if let Some(subject) = &self.subject {
+            e.merge("subject", subject.validate());
+        }
+        if let Some(description) = &self.description {
+            e.merge("description", description.validate());
+        }
+        e.finish()
+    }
+}
+
+#[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AssignTaskRequest {
-    #[garde(skip)]
     pub assignee_id: Uuid,
 }
 
-#[derive(Debug, Deserialize, garde::Validate)]
+impl forma::Validate for AssignTaskRequest {
+    fn validate(&self) -> Result<(), forma::FieldErrors> {
+        Ok(())
+    }
+}
+
+// ── Comment Requests ──────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AddCommentRequest {
-    #[garde(dive)]
     pub body: CommentBodyField,
 }
 
-#[derive(Debug, Deserialize, garde::Validate)]
+impl forma::Validate for AddCommentRequest {
+    fn validate(&self) -> Result<(), forma::FieldErrors> {
+        let mut e = forma::FieldErrors::default();
+        e.merge("body", self.body.validate());
+        e.finish()
+    }
+}
+
+#[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EditCommentRequest {
-    #[garde(dive)]
     pub body: CommentBodyField,
 }
 
-#[derive(Debug, Deserialize, garde::Validate)]
+impl forma::Validate for EditCommentRequest {
+    fn validate(&self) -> Result<(), forma::FieldErrors> {
+        let mut e = forma::FieldErrors::default();
+        e.merge("body", self.body.validate());
+        e.finish()
+    }
+}
+
+// ── Query Params ──────────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct CreateTaskRequest {
-    #[garde(dive)]
-    pub subject: TaskSubjectField,
-    #[garde(dive)]
+pub struct ListTasksParams {
+    #[serde(default, rename = "status")]
+    pub statuses: Vec<String>,
     #[serde(default)]
-    pub description: TaskDescriptionField,
-    #[garde(skip)]
-    pub assignee_id: Option<Uuid>,
+    pub limit: PaginationLimitField,
+    pub cursor: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ListCommentsParams {
+    #[serde(default)]
+    pub limit: PaginationLimitField,
+    pub cursor: Option<String>,
+}
+
+impl forma::Validate for ListTasksParams {
+    fn validate(&self) -> Result<(), forma::FieldErrors> {
+        let mut e = forma::FieldErrors::default();
+        e.merge("limit", self.limit.validate());
+        e.finish()
+    }
+}
+
+impl forma::Validate for ListCommentsParams {
+    fn validate(&self) -> Result<(), forma::FieldErrors> {
+        let mut e = forma::FieldErrors::default();
+        e.merge("limit", self.limit.validate());
+        e.finish()
+    }
 }

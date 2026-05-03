@@ -15,12 +15,13 @@ telemetry-console = ["servicez-telemetry-console"]
 [workspace]
 resolver = "2"
 members = [
-    "domain", 
+    "domain",
     "application",
     "http",
     "adapters/postgres",
     "adapters/scylla",
     "adapters/telemetry",
+    "forma",
 ]
 
 [dependencies]
@@ -55,7 +56,6 @@ tracing = "0.1.44"
 uuid = { version = "1.23", features = ["v4", "serde"] }
 
 # Validation
-garde = { version = "0.22.1", features = ["full"] }
 chrono = { version = "0.4.44", features = ["serde"] }
 
 # Prefix Vocabulary:

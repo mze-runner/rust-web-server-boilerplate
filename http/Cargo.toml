@@ -24,7 +24,7 @@ tokio = { version = "1.49", features = ["full"] }
 tracing = "0.1.44"
 
 # Validation
-garde = { version = "0.22.1", features = ["full"] }
+forma = { path = "../forma", features = ["datetime"] }
 chrono = { version = "0.4.43", features = ["serde"] }
 
 anyhow = "1"

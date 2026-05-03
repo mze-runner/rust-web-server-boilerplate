@@ -58,5 +58,6 @@ async fn validate_token(token: &str, trace_id: &str) -> Result<Uuid, AppError> {
         return Err(AppError::Unauthorized("Token rejected".to_string()));
     }
 
-    Uuid::parse_str(token).map_err(|_| AppError::Unauthorized("Token is not a valid user ID".to_string()))
+    Uuid::parse_str(token)
+        .map_err(|_| AppError::Unauthorized("Token is not a valid user ID".to_string()))
 }

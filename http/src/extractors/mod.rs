@@ -10,4 +10,4 @@ pub mod validation;
 // Re-export all extractors for easy importing
 pub use auth::AuthenticatedUser;
 pub use trace::ExtractTraceId;
-pub use validation::ValidatedJson;
+pub use validation::{ValidatedJson, ValidatedQuery};

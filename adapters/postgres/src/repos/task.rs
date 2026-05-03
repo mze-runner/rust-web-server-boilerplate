@@ -134,9 +134,16 @@ impl TaskRepository for PostgresTaskRepository {
     ) -> impl std::future::Future<Output = Result<TaskPage, DomainError>> + Send {
         let pool = self.pool.clone();
         let uid = *query.caller_id.as_uuid();
-        let statuses: Vec<String> = query.statuses.iter().map(|s| s.as_str().to_owned()).collect();
+        let statuses: Vec<String> = query
+            .statuses
+            .iter()
+            .map(|s| s.as_str().to_owned())
+            .collect();
         let limit = query.limit as i64;
-        let cursor = query.cursor.as_ref().map(|c| (c.created_at, *c.id.as_uuid()));
+        let cursor = query
+            .cursor
+            .as_ref()
+            .map(|c| (c.created_at, *c.id.as_uuid()));
 
         async move {
             let mut sql = String::from(
@@ -330,9 +337,16 @@ impl TaskRepository for TxTaskRepository {
     ) -> impl std::future::Future<Output = Result<TaskPage, DomainError>> + Send {
         let tx = Arc::clone(&self.tx);
         let uid = *query.caller_id.as_uuid();
-        let statuses: Vec<String> = query.statuses.iter().map(|s| s.as_str().to_owned()).collect();
+        let statuses: Vec<String> = query
+            .statuses
+            .iter()
+            .map(|s| s.as_str().to_owned())
+            .collect();
         let limit = query.limit as i64;
-        let cursor = query.cursor.as_ref().map(|c| (c.created_at, *c.id.as_uuid()));
+        let cursor = query
+            .cursor
+            .as_ref()
+            .map(|c| (c.created_at, *c.id.as_uuid()));
 
         async move {
             let mut guard = tx.lock().await;

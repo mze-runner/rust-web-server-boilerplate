@@ -10,7 +10,7 @@ use servicez_application::error::AppError;
 ///
 /// Fails with 401 if the auth middleware did not run or the token was rejected.
 ///
-/// ```rust
+/// ```rust,ignore
 /// pub async fn handler(
 ///     AuthenticatedUser(subject): AuthenticatedUser,
 /// ) -> impl IntoResponse {

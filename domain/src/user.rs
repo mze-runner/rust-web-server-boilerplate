@@ -45,7 +45,7 @@ impl std::fmt::Display for Username {
 }
 
 /// Email address — basic structural sanity (non-empty, contains exactly one `@`).
-/// Full RFC 5322 validation is enforced at the HTTP boundary via `garde`.
+/// Full RFC 5322 validation is enforced at the HTTP boundary via `forma`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Email(String);
 

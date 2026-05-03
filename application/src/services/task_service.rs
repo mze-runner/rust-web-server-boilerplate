@@ -7,8 +7,9 @@ use std::str::FromStr;
 
 use servicez_domain::{
     error::DomainError,
-    ports::{TaskRepository, UnitOfWork, UnitOfWorkFactory, UserRepository},
+    ports::{TaskCommentRepository, TaskRepository, UnitOfWork, UnitOfWorkFactory, UserRepository},
     task::{EditTaskCommand, ListTasksQuery, Task, TaskCursor, TaskId, TaskPage, TaskStatus},
+    task_comment::{CommentCursor, CommentPage, ListCommentsQuery, TaskComment, TaskCommentId},
     user::UserId,
 };
 
@@ -29,6 +30,7 @@ where
     F: UnitOfWorkFactory,
     <F::Uow as UnitOfWork>::Users: UserRepository,
     <F::Uow as UnitOfWork>::Tasks: TaskRepository,
+    <F::Uow as UnitOfWork>::Comments: TaskCommentRepository,
 {
     pub fn new(repo: Arc<R>, uow_factory: Arc<F>) -> Self {
         Self { repo, uow_factory }
@@ -109,9 +111,7 @@ where
             .await
             .map_err(AppError::Domain)?
             .ok_or_else(|| {
-                AppError::UnprocessableEntity(
-                    "assignee_id does not reference a known user".into(),
-                )
+                AppError::UnprocessableEntity("assignee_id does not reference a known user".into())
             })?;
 
         task.assign(new_assignee_id, &caller_id, chrono::Utc::now())
@@ -145,8 +145,243 @@ where
             created_at,
             id: TaskId::from_uuid(id),
         });
-        let query = ListTasksQuery { caller_id, statuses, limit, cursor };
-        self.repo.list_for_user(&query).await.map_err(AppError::Domain)
+        let query = ListTasksQuery {
+            caller_id,
+            statuses,
+            limit,
+            cursor,
+        };
+        self.repo
+            .list_for_user(&query)
+            .await
+            .map_err(AppError::Domain)
+    }
+
+    pub async fn add_comment(
+        &self,
+        caller_id: Uuid,
+        task_id: Uuid,
+        body: String,
+    ) -> Result<TaskComment, AppError> {
+        let caller_id = UserId::from_uuid(caller_id);
+        let task_id = TaskId::from_uuid(task_id);
+
+        let mut uow = self.uow_factory.begin().await.map_err(AppError::Domain)?;
+
+        let task = uow
+            .tasks()
+            .find_by_id(&task_id)
+            .await
+            .map_err(AppError::Domain)?
+            .ok_or_else(|| {
+                AppError::Domain(DomainError::NotFound {
+                    resource_type: "Task".into(),
+                    identifier: task_id.as_uuid().to_string(),
+                })
+            })?;
+
+        let can_comment = task.created_by() == &caller_id || task.assignee_id() == &caller_id;
+        if !can_comment {
+            return Err(AppError::Domain(DomainError::Forbidden {
+                reason: "only the task creator or assignee may comment on this task".into(),
+            }));
+        }
+
+        let now = chrono::Utc::now();
+        let comment =
+            TaskComment::create(task_id, caller_id, body, now).map_err(AppError::Domain)?;
+
+        uow.comments()
+            .create(&comment)
+            .await
+            .map_err(AppError::Domain)?;
+        uow.commit().await.map_err(AppError::Domain)?;
+
+        Ok(comment)
+    }
+
+    pub async fn list_comments(
+        &self,
+        caller_id: Uuid,
+        task_id: Uuid,
+        limit: u32,
+        cursor: Option<(DateTime<Utc>, Uuid)>,
+    ) -> Result<CommentPage, AppError> {
+        let caller_id = UserId::from_uuid(caller_id);
+        let task_id = TaskId::from_uuid(task_id);
+        let cursor = cursor.map(|(created_at, id)| CommentCursor {
+            created_at,
+            id: TaskCommentId::from_uuid(id),
+        });
+
+        let mut uow = self.uow_factory.begin().await.map_err(AppError::Domain)?;
+
+        let task = uow
+            .tasks()
+            .find_by_id(&task_id)
+            .await
+            .map_err(AppError::Domain)?
+            .ok_or_else(|| {
+                AppError::Domain(DomainError::NotFound {
+                    resource_type: "Task".into(),
+                    identifier: task_id.as_uuid().to_string(),
+                })
+            })?;
+
+        let can_view = task.created_by() == &caller_id || task.assignee_id() == &caller_id;
+        if !can_view {
+            return Err(AppError::Domain(DomainError::Forbidden {
+                reason: "only the task creator or assignee may view comments on this task".into(),
+            }));
+        }
+
+        let query = ListCommentsQuery {
+            task_id,
+            limit,
+            cursor,
+        };
+        uow.comments()
+            .list_for_task(&query)
+            .await
+            .map_err(AppError::Domain)
+    }
+
+    pub async fn edit_comment(
+        &self,
+        caller_id: Uuid,
+        task_id: Uuid,
+        comment_id: Uuid,
+        body: String,
+    ) -> Result<TaskComment, AppError> {
+        let caller_id = UserId::from_uuid(caller_id);
+        let task_id = TaskId::from_uuid(task_id);
+        let comment_id = TaskCommentId::from_uuid(comment_id);
+
+        let mut uow = self.uow_factory.begin().await.map_err(AppError::Domain)?;
+
+        let task = uow
+            .tasks()
+            .find_by_id(&task_id)
+            .await
+            .map_err(AppError::Domain)?
+            .ok_or_else(|| {
+                AppError::Domain(DomainError::NotFound {
+                    resource_type: "Task".into(),
+                    identifier: task_id.as_uuid().to_string(),
+                })
+            })?;
+
+        let is_visible = task.created_by() == &caller_id || task.assignee_id() == &caller_id;
+        if !is_visible {
+            return Err(AppError::Domain(DomainError::NotFound {
+                resource_type: "Task".into(),
+                identifier: task_id.as_uuid().to_string(),
+            }));
+        }
+
+        let mut comment = uow
+            .comments()
+            .find_by_id(&comment_id)
+            .await
+            .map_err(AppError::Domain)?
+            .ok_or_else(|| {
+                AppError::Domain(DomainError::NotFound {
+                    resource_type: "TaskComment".into(),
+                    identifier: comment_id.as_uuid().to_string(),
+                })
+            })?;
+
+        if comment.task_id() != &task_id {
+            return Err(AppError::Domain(DomainError::NotFound {
+                resource_type: "TaskComment".into(),
+                identifier: comment_id.as_uuid().to_string(),
+            }));
+        }
+
+        if comment.author_id() != &caller_id {
+            return Err(AppError::Domain(DomainError::Forbidden {
+                reason: "only the comment author may edit this comment".into(),
+            }));
+        }
+
+        let now = chrono::Utc::now();
+        comment
+            .edit(body, caller_id, now)
+            .map_err(AppError::Domain)?;
+
+        uow.comments()
+            .update(&comment)
+            .await
+            .map_err(AppError::Domain)?;
+        uow.commit().await.map_err(AppError::Domain)?;
+
+        Ok(comment)
+    }
+
+    pub async fn delete_comment(
+        &self,
+        caller_id: Uuid,
+        task_id: Uuid,
+        comment_id: Uuid,
+    ) -> Result<(), AppError> {
+        let caller_id = UserId::from_uuid(caller_id);
+        let task_id = TaskId::from_uuid(task_id);
+        let comment_id = TaskCommentId::from_uuid(comment_id);
+
+        let mut uow = self.uow_factory.begin().await.map_err(AppError::Domain)?;
+
+        let task = uow
+            .tasks()
+            .find_by_id(&task_id)
+            .await
+            .map_err(AppError::Domain)?
+            .ok_or_else(|| {
+                AppError::Domain(DomainError::NotFound {
+                    resource_type: "Task".into(),
+                    identifier: task_id.as_uuid().to_string(),
+                })
+            })?;
+
+        let is_visible = task.created_by() == &caller_id || task.assignee_id() == &caller_id;
+        if !is_visible {
+            return Err(AppError::Domain(DomainError::NotFound {
+                resource_type: "Task".into(),
+                identifier: task_id.as_uuid().to_string(),
+            }));
+        }
+
+        let comment = uow
+            .comments()
+            .find_by_id(&comment_id)
+            .await
+            .map_err(AppError::Domain)?
+            .ok_or_else(|| {
+                AppError::Domain(DomainError::NotFound {
+                    resource_type: "TaskComment".into(),
+                    identifier: comment_id.as_uuid().to_string(),
+                })
+            })?;
+
+        if comment.task_id() != &task_id {
+            return Err(AppError::Domain(DomainError::NotFound {
+                resource_type: "TaskComment".into(),
+                identifier: comment_id.as_uuid().to_string(),
+            }));
+        }
+
+        if comment.author_id() != &caller_id {
+            return Err(AppError::Domain(DomainError::Forbidden {
+                reason: "only the comment author may delete this comment".into(),
+            }));
+        }
+
+        uow.comments()
+            .delete(&comment_id)
+            .await
+            .map_err(AppError::Domain)?;
+        uow.commit().await.map_err(AppError::Domain)?;
+
+        Ok(())
     }
 
     pub async fn edit_task(

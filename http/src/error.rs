@@ -141,16 +141,12 @@ impl From<AppError> for ProblemDetails {
                                 from, to, reason
                             ))
                     }
-                    DomainError::ImmutableResource => {
-                        ProblemDetails::new(
-                            StatusCode::UNPROCESSABLE_ENTITY,
-                            "Unprocessable Entity",
-                        )
-                        .with_code("domain.immutable_resource")
-                        .with_detail(
-                            "cannot mutate a task in Done or Cancelled status".to_owned(),
-                        )
-                    }
+                    DomainError::ImmutableResource => ProblemDetails::new(
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        "Unprocessable Entity",
+                    )
+                    .with_code("domain.immutable_resource")
+                    .with_detail("cannot mutate a task in Done or Cancelled status".to_owned()),
                     DomainError::Repository { .. } => {
                         // Infrastructure details must not reach the client.
                         ProblemDetails::new(
@@ -292,6 +288,24 @@ impl From<AppError> for ProblemDetails {
 //     }
 // }
 
+impl From<forma::FieldErrors> for ProblemDetails {
+    fn from(errors: forma::FieldErrors) -> Self {
+        let field_errors: Vec<FieldError> = errors
+            .into_inner()
+            .into_iter()
+            .map(|(path, v)| FieldError {
+                field: path,
+                message: v.message,
+            })
+            .collect();
+        let mut problem = validation_failed_problem();
+        if !field_errors.is_empty() {
+            problem = problem.with_field_errors(field_errors);
+        }
+        problem
+    }
+}
+
 pub fn invalid_json_problem() -> ProblemDetails {
     ProblemDetails::new(StatusCode::BAD_REQUEST, "Invalid JSON")
         .with_code("invalid_json")
@@ -299,8 +313,7 @@ pub fn invalid_json_problem() -> ProblemDetails {
 }
 
 pub fn validation_failed_problem() -> ProblemDetails {
-    ProblemDetails::new(StatusCode::BAD_REQUEST, "Validation Failed")
-        .with_code("validation_failed")
+    ProblemDetails::new(StatusCode::BAD_REQUEST, "Validation Failed").with_code("validation_failed")
 }
 
 pub fn app_error_to_response(error: AppError, trace_id: impl Into<String>) -> Response {

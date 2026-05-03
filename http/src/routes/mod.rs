@@ -23,19 +23,18 @@ pub trait ServiceHealth: Clone + Send + Sync + 'static {
     fn health_check(&self) -> impl Future<Output = anyhow::Result<()>> + Send;
 }
 
-/// Complete routing table — every URL and access level defined in one place.
+/// Access groups — the authoritative record of which routes require authentication.
 ///
-/// Public routes:   accessible without authentication
+/// Public routes:   no authentication required
 /// Protected routes: require a valid Bearer token (authenticate middleware)
 pub fn router<S>() -> Router<Arc<S>>
 where
     S: ServiceHealth + TaskOperations,
 {
-    let public = Router::new()
-        .route("/api/v1/healthz", get(healthz::<S>));
+    let public = Router::new().route("/api/v1/healthz", get(healthz::<S>));
 
     let protected = Router::new()
-        .nest("/api/v1/tasks", tasks::router::<S>())
+        .merge(tasks::router::<S>())
         .layer(middleware::from_fn(authenticate));
 
     Router::new()
